@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
 	"fmt"
+	"io/ioutil"
 	"os"
 )
 
@@ -26,8 +29,48 @@ func main() {
 
 		fmt.Println("Initialized git directory")
 
+	case "cat-file":
+		if len(os.Args) < 4 {
+			fmt.Fprintf(os.Stderr, "usage: mygit cat-file -p <hash>\n")
+			os.Exit(1)
+		}
+
+		hash := os.Args[3]
+		if len(hash) != 40 {
+			fmt.Fprintf(os.Stderr, "Invalid hash: %s\n", hash)
+			os.Exit(1)
+		}
+
+		content, _ := readBlob(hash)
+
+		fmt.Print(content)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command %s\n", command)
 		os.Exit(1)
 	}
+}
+
+func readBlob(sha string) (string, error) {
+	path := ".git/objects/" + sha[0:2] + "/" + sha[2:]
+
+	commpressedBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	raw, err := zlib.NewReader(bytes.NewReader(commpressedBytes))
+	if err != nil {
+		return "", err
+	}
+	defer raw.Close()
+
+	decompressed, err := ioutil.ReadAll(raw)
+	if err != nil {
+		return "", err
+	}
+
+	x := bytes.Index(decompressed, []byte{' '})
+	y := bytes.Index(decompressed[x:], []byte{'\x00'}) + x
+
+	return string(decompressed)[y+1:], nil
 }
